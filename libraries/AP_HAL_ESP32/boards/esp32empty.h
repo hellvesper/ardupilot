@@ -31,8 +31,9 @@
 // default protocols:    ardupilot/libraries/AP_SerialManager/AP_SerialManager.cpp
 // ESP32 serials:    AP_HAL_ESP32/HAL_ESP32_Class.cpp
 
-//#define DEFAULT_SERIAL0_PROTOCOL        SerialProtocol_MAVLink2   //A  UART0: Always: Console, MAVLink2
+#define DEFAULT_SERIAL0_PROTOCOL        SerialProtocol_MAVLink2   //A  idfi: Always: Console, MAVLink2
 //#define DEFAULT_SERIAL0_BAUD            AP_SERIALMANAGER_CONSOLE_BAUD/1000  //115200
+#define DEFAULT_SERIAL0_BAUD            (115200/1000)  //115200
 
 //#define DEFAULT_SERIAL1_PROTOCOL        SerialProtocol_MAVLink2   //C  WiFi:  TCP, UDP, or disable (depends on HAL_ESP32_WIFI)
 //#define DEFAULT_SERIAL1_BAUD            AP_SERIALMANAGER_MAVLINK_BAUD/1000  //57600
@@ -137,9 +138,11 @@
 //#define HAL_ESP32_SDMMC
 //#define HAL_ESP32_SDSPI {.host=VSPI_HOST, .dma_ch=2, .mosi=GPIO_NUM_2, .miso=GPIO_NUM_15, .sclk=GPIO_NUM_26, .cs=GPIO_NUM_21}
 
-#define HAL_LOGGING_FILESYSTEM_ENABLED 0
+//#define HAL_LOGGING_FILESYSTEM_ENABLED 0 // // this throws compilation errors
 #define HAL_LOGGING_DATAFLASH_ENABLED 0
 #define HAL_LOGGING_MAVLINK_ENABLED 0
+
+//#define HAL_LOGGING_STACK_SIZE 4096
 
 #define HAL_BOARD_LOG_DIRECTORY "/SDCARD/APM/LOGS"
 #define HAL_BOARD_STORAGE_DIRECTORY "/SDCARD/APM/STORAGE"

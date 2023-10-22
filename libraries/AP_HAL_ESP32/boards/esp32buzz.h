@@ -35,7 +35,8 @@
 //#define HAL_BOARD_ESP32 12
 
 //INS choices:
-#define HAL_INS_DEFAULT HAL_INS_MPU9250_SPI
+//#define HAL_INS_DEFAULT HAL_INS_MPU9250_SPI
+#define HAL_INS_DEFAULT HAL_INS_MPU60XX_SPI
 //#define HAL_INS_MPU9250_NAME "MPU9250"
 
 // or this:
@@ -104,7 +105,8 @@
 #define HAL_PROBE_EXTERNAL_I2C_COMPASSES 1
 
 
-#define HAL_INS_MPU9250_NAME "mpu9250"
+//#define HAL_INS_MPU9250_NAME "mpu9250"
+#define HAL_INS_MPU60x0_NAME "MPU6000"
 
 // uncommenting one or more of these will give more console debug in certain areas.. ... 
 // ...however all teh extra printf's use a lot of stack, so best to limit yourself to only uncommenting one at a time
@@ -115,8 +117,9 @@
 //#define WIFIDEBUG 1 //uses a lot?
 //#define INS_TIMING_DEBUG 1 //define this to see all the imu-resets and temp resets and imu timing info on the console.
 
-#define HAL_INS_PROBE_LIST PROBE_IMU_SPI( Invensense, HAL_INS_MPU9250_NAME, ROTATION_NONE)
+//#define HAL_INS_PROBE_LIST PROBE_IMU_SPI( Invensense, HAL_INS_MPU9250_NAME, ROTATION_NONE)
 //#define HAL_INS_PROBE_LIST PROBE_IMU_SPI( Invensense, HAL_INS_MPU9250_NAME, ROTATION_ROLL_180)
+#define HAL_INS_PROBE_LIST PROBE_IMU_SPI( Invensense, HAL_INS_MPU60x0_NAME, ROTATION_NONE)
 
 
 #define HAL_BARO_PROBE_LIST PROBE_BARO_SPI(BMP280, "bmp280")
@@ -187,6 +190,6 @@
 
 // this becomes the default value for the ardupilot param LOG_BACKEND_TYPE, which most ppl want to be 1, for log-to-flash
 // setting to 2 means log-over-mavlink to a companion computer etc.
-#define HAL_LOGGING_BACKENDS_DEFAULT 1
+#define HAL_LOGGING_BACKENDS_DEFAULT 2
 
 #define HAL_ESP32_RMT_RX_PIN_NUMBER 4

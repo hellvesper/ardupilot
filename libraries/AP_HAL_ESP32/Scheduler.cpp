@@ -26,6 +26,7 @@
 #include "soc/rtc_wdt.h"
 #include "esp_int_wdt.h"
 #include "esp_task_wdt.h"
+#include "esp_log.h"
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Scheduler/AP_Scheduler.h>
@@ -48,7 +49,9 @@ void disableCore0WDT()
 {
     TaskHandle_t idle_0 = xTaskGetIdleTaskHandleForCPU(0);
     if (idle_0 == NULL || esp_task_wdt_delete(idle_0) != ESP_OK) {
-        //print("Failed to remove Core 0 IDLE task from WDT");
+#ifdef SCHEDULERDEBUG
+        print("Failed to remove Core 0 IDLE task from WDT");
+#endif
     }
 }
 
@@ -56,7 +59,9 @@ void disableCore1WDT()
 {
     TaskHandle_t idle_1 = xTaskGetIdleTaskHandleForCPU(1);
     if (idle_1 == NULL || esp_task_wdt_delete(idle_1) != ESP_OK) {
-        //print("Failed to remove Core 1 IDLE task from WDT");
+#ifdef SCHEDULERDEBUG
+        print("Failed to remove Core 1 IDLE task from WDT");
+#endif
     }
 }
 
