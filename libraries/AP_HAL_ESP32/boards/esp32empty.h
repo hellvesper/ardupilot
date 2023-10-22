@@ -31,9 +31,11 @@
 // default protocols:    ardupilot/libraries/AP_SerialManager/AP_SerialManager.cpp
 // ESP32 serials:    AP_HAL_ESP32/HAL_ESP32_Class.cpp
 
-#define DEFAULT_SERIAL0_PROTOCOL        SerialProtocol_MAVLink2   //A  idfi: Always: Console, MAVLink2
+
+// NOTE: Uncommenting SERIAL0 prevent booting by some reason, in commented state you can see esp debug messages  and mavlink worked
+//#define DEFAULT_SERIAL0_PROTOCOL        SerialProtocol_MAVLink2   //A  idfi: Always: Console, MAVLink2
 //#define DEFAULT_SERIAL0_BAUD            AP_SERIALMANAGER_CONSOLE_BAUD/1000  //115200
-#define DEFAULT_SERIAL0_BAUD            (115200/1000)  //115200
+//#define DEFAULT_SERIAL0_BAUD            (115200/1000)  //115200
 
 //#define DEFAULT_SERIAL1_PROTOCOL        SerialProtocol_MAVLink2   //C  WiFi:  TCP, UDP, or disable (depends on HAL_ESP32_WIFI)
 //#define DEFAULT_SERIAL1_BAUD            AP_SERIALMANAGER_MAVLINK_BAUD/1000  //57600
