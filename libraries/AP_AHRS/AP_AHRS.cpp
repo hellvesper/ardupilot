@@ -79,7 +79,7 @@ const AP_Param::GroupInfo AP_AHRS::var_info[] = {
 
     // @Param: WIND_MAX
     // @DisplayName: Maximum wind
-    // @Description: This sets the maximum allowable difference between ground speed and airspeed. This allows the plane to cope with a failing airspeed sensor. A value of zero means to use the airspeed as is. See ARSPD_OPTIONS and ARSPD_MAX_WIND to disable airspeed sensors.
+    // @Description: This sets the maximum allowable difference between ground speed and airspeed. A value of zero means to use the airspeed as is. This allows the plane to cope with a failing airspeed sensor by clipping it to groundspeed plus/minus this limit. See ARSPD_OPTIONS and ARSPD_WIND_MAX to disable airspeed sensors.
     // @Range: 0 127
     // @Units: m/s
     // @Increment: 1
@@ -242,7 +242,7 @@ void AP_AHRS::init()
 #endif
 
 #if !APM_BUILD_TYPE(APM_BUILD_AP_Periph)
-    // convert to new custom rotaton
+    // convert to new custom rotation
     // PARAMETER_CONVERSION - Added: Nov-2021
     if (_board_orientation == ROTATION_CUSTOM_OLD) {
         _board_orientation.set_and_save(ROTATION_CUSTOM_1);
@@ -330,7 +330,7 @@ void AP_AHRS::update_state(void)
     state.primary_core = _get_primary_core_index();
     state.wind_estimate_ok = _wind_estimate(state.wind_estimate);
     state.EAS2TAS = AP_AHRS_Backend::get_EAS2TAS();
-    state.airspeed_ok = _airspeed_estimate(state.airspeed);
+    state.airspeed_ok = _airspeed_estimate(state.airspeed, state.airspeed_estimate_type);
     state.airspeed_true_ok = _airspeed_estimate_true(state.airspeed_true);
     state.airspeed_vec_ok = _airspeed_vector_true(state.airspeed_vec);
     state.quat_ok = _get_quaternion(state.quat);
@@ -590,7 +590,7 @@ void AP_AHRS::update_EKF2(void)
             float &abias = state.accel_bias.z;
             EKF2.getAccelZBias(abias);
 
-            // This EKF is currently using primary_imu, and abias applies to only that IMU
+            // This EKF is currently using primary_imu, and a bias applies to only that IMU
             Vector3f accel = _ins.get_accel(primary_accel);
             accel.z -= abias;
             state.accel_ef = state.dcm_matrix * get_rotation_autopilot_body_to_vehicle_body() * accel;
@@ -653,7 +653,7 @@ void AP_AHRS::update_EKF3(void)
             // use the same IMU as the primary EKF and correct for gyro drift
             state.gyro_estimate = _ins.get_gyro(primary_gyro) + state.gyro_drift;
 
-            // get 3-axis accel bias festimates for active EKF (this is usually for the primary IMU)
+            // get 3-axis accel bias estimates for active EKF (this is usually for the primary IMU)
             Vector3f &abias = state.accel_bias;
             EKF3.getAccelBias(-1,abias);
 
@@ -821,7 +821,7 @@ bool AP_AHRS::airspeed_sensor_enabled(void) const
         // special case for when backend is rejecting airspeed data in
         // an armed fly_forward state and not dead reckoning. Then the
         // airspeed data is highly suspect and will be rejected. We
-        // will use the synthentic airspeed instead
+        // will use the synthetic airspeed instead
         return false;
     }
     return true;
@@ -829,7 +829,7 @@ bool AP_AHRS::airspeed_sensor_enabled(void) const
 
 // return an airspeed estimate if available. return true
 // if we have an estimate
-bool AP_AHRS::_airspeed_estimate(float &airspeed_ret) const
+bool AP_AHRS::_airspeed_estimate(float &airspeed_ret, AirspeedEstimateType &airspeed_estimate_type) const
 {
 #if AP_AIRSPEED_ENABLED && AP_GPS_ENABLED
     if (airspeed_sensor_enabled()) {
@@ -846,12 +846,13 @@ bool AP_AHRS::_airspeed_estimate(float &airspeed_ret) const
                                             gnd_speed + _wind_max);
             airspeed_ret = true_airspeed / get_EAS2TAS();
         }
-
+        airspeed_estimate_type = AirspeedEstimateType::AIRSPEED_SENSOR;
         return true;
     }
 #endif
 
     if (!get_wind_estimation_enabled()) {
+        airspeed_estimate_type = AirspeedEstimateType::NO_NEW_ESTIMATE;
         return false;
     }
 
@@ -864,17 +865,20 @@ bool AP_AHRS::_airspeed_estimate(float &airspeed_ret) const
     switch (active_EKF_type()) {
 #if AP_AHRS_DCM_ENABLED
     case EKFType::DCM:
+        airspeed_estimate_type = AirspeedEstimateType::DCM_SYNTHETIC;
         return dcm.airspeed_estimate(get_active_airspeed_index(), airspeed_ret);
 #endif
 
 #if AP_AHRS_SIM_ENABLED
     case EKFType::SIM:
+        airspeed_estimate_type = AirspeedEstimateType::SIM;
         return sim.airspeed_estimate(airspeed_ret);
 #endif
 
 #if HAL_NAVEKF2_AVAILABLE
     case EKFType::TWO:
 #if AP_AHRS_DCM_ENABLED
+        airspeed_estimate_type = AirspeedEstimateType::DCM_SYNTHETIC;
         return dcm.airspeed_estimate(get_active_airspeed_index(), airspeed_ret);
 #else
         return false;
@@ -889,7 +893,8 @@ bool AP_AHRS::_airspeed_estimate(float &airspeed_ret) const
 
 #if HAL_EXTERNAL_AHRS_ENABLED
     case EKFType::EXTERNAL:
-        return false;
+        airspeed_estimate_type = AirspeedEstimateType::DCM_SYNTHETIC;
+        return dcm.airspeed_estimate(get_active_airspeed_index(), airspeed_ret);
 #endif
     }
 
@@ -907,11 +912,13 @@ bool AP_AHRS::_airspeed_estimate(float &airspeed_ret) const
             true_airspeed = MAX(0.0f, true_airspeed);
         }
         airspeed_ret = true_airspeed / get_EAS2TAS();
+        airspeed_estimate_type = AirspeedEstimateType::EKF3_SYNTHETIC;
         return true;
     }
 
 #if AP_AHRS_DCM_ENABLED
     // fallback to DCM
+    airspeed_estimate_type = AirspeedEstimateType::DCM_SYNTHETIC;
     return dcm.airspeed_estimate(get_active_airspeed_index(), airspeed_ret);
 #endif
 
@@ -1500,7 +1507,7 @@ bool AP_AHRS::get_mag_field_correction(Vector3f &vec) const
 }
 
 // Get a derivative of the vertical position which is kinematically consistent with the vertical position is required by some control loops.
-// This is different to the vertical velocity from the EKF which is not always consistent with the verical position due to the various errors that are being corrected for.
+// This is different to the vertical velocity from the EKF which is not always consistent with the vertical position due to the various errors that are being corrected for.
 bool AP_AHRS::get_vert_pos_rate_D(float &velocity) const
 {
     switch (active_EKF_type()) {
@@ -2111,7 +2118,7 @@ bool AP_AHRS::pre_arm_check(bool requires_position, char *failure_msg, uint8_t f
 
 #if HAL_EXTERNAL_AHRS_ENABLED
     // Always check external AHRS if enabled
-    // it is a source for IMU data even if not being used as direct AHRS replacment
+    // it is a source for IMU data even if not being used as direct AHRS replacement
     if (AP::externalAHRS().enabled() || (ekf_type() == EKFType::EXTERNAL)) {
         if (!AP::externalAHRS().pre_arm_check(failure_msg, failure_msg_len)) {
             return false;
@@ -2916,7 +2923,7 @@ void AP_AHRS::set_terrain_hgt_stable(bool stable)
 #endif
 }
 
-// return the innovations for the primariy EKF
+// return the innovations for the primarily EKF
 // boolean false is returned if innovations are not available
 bool AP_AHRS::get_innovations(Vector3f &velInnov, Vector3f &posInnov, Vector3f &magInnov, float &tasInnov, float &yawInnov) const
 {
@@ -2980,7 +2987,7 @@ bool AP_AHRS::is_vibration_affected() const
 
 // get_variances - provides the innovations normalised using the innovation variance where a value of 0
 // indicates prefect consistency between the measurement and the EKF solution and a value of 1 is the maximum
-// inconsistency that will be accpeted by the filter
+// inconsistency that will be accepted by the filter
 // boolean false is returned if variances are not available
 bool AP_AHRS::get_variances(float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar) const
 {
@@ -3386,6 +3393,15 @@ bool AP_AHRS::wind_estimate(Vector3f &wind) const
 bool AP_AHRS::airspeed_estimate(float &airspeed_ret) const
 {
     airspeed_ret = state.airspeed;
+    return state.airspeed_ok;
+}
+
+// return an airspeed estimate if available. return true
+// if we have an estimate
+bool AP_AHRS::airspeed_estimate(float &airspeed_ret, AP_AHRS::AirspeedEstimateType &type) const
+{
+    airspeed_ret = state.airspeed;
+    type = state.airspeed_estimate_type;
     return state.airspeed_ok;
 }
 

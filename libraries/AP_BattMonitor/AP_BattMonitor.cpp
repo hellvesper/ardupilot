@@ -810,7 +810,7 @@ void AP_BattMonitor::check_failsafes(void)
 #endif
             state[i].failsafe = type;
 
-            // map the desired failsafe action to a prioritiy level
+            // map the desired failsafe action to a priority level
             int8_t priority = 0;
             if (_failsafe_priorities != nullptr) {
                 while (_failsafe_priorities[priority] != -1) {
@@ -872,6 +872,23 @@ const AP_BattMonitor::cells & AP_BattMonitor::get_cell_voltages(const uint8_t in
     } else {
         return state[instance].cell_voltages;
     }
+}
+
+// get once cell voltage (for scripting)
+bool AP_BattMonitor::get_cell_voltage(uint8_t instance, uint8_t cell, float &voltage) const
+{
+    if (!has_cell_voltages(instance) ||
+        cell >= AP_BATT_MONITOR_CELLS_MAX) {
+        return false;
+    }
+    const auto &cell_voltages = get_cell_voltages(instance);
+    const uint16_t voltage_mv = cell_voltages.cells[cell];
+    if (voltage_mv == 0 || voltage_mv == UINT16_MAX) {
+        // UINT16_MAX is used as invalid indicator
+        return false;
+    }
+    voltage = voltage_mv*0.001;
+    return true;
 }
 
 // returns true if there is a temperature reading

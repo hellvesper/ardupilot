@@ -320,8 +320,10 @@ static const ap_message STREAM_EXTENDED_STATUS_msgs[] = {
     MSG_CURRENT_WAYPOINT, // MISSION_CURRENT
     MSG_GPS_RAW,
     MSG_GPS_RTK,
+#if GPS_MAX_RECEIVERS > 1
     MSG_GPS2_RAW,
     MSG_GPS2_RTK,
+#endif
     MSG_NAV_CONTROLLER_OUTPUT,
 #if AP_FENCE_ENABLED
     MSG_FENCE_STATUS,
@@ -352,7 +354,9 @@ static const ap_message STREAM_EXTRA3_msgs[] = {
     MSG_WIND,
     MSG_RANGEFINDER,
     MSG_DISTANCE_SENSOR,
+#if AP_BATTERY_ENABLED
     MSG_BATTERY_STATUS,
+#endif
     MSG_GIMBAL_DEVICE_ATTITUDE_STATUS,
     MSG_OPTICAL_FLOW,
 #if COMPASS_CAL_ENABLED
@@ -372,7 +376,9 @@ static const ap_message STREAM_PARAMS_msgs[] = {
 };
 static const ap_message STREAM_ADSB_msgs[] = {
     MSG_ADSB_VEHICLE,
+#if AP_AIS_ENABLED
     MSG_AIS_VESSEL,
+#endif
 };
 
 const struct GCS_MAVLINK::stream_entries GCS_MAVLINK::all_stream_entries[] = {
@@ -475,39 +481,20 @@ MAV_RESULT GCS_MAVLINK_Blimp::handle_command_int_packet(const mavlink_command_in
     switch (packet.command) {
     case MAV_CMD_DO_REPOSITION:
         return handle_command_int_do_reposition(packet);
+    case MAV_CMD_NAV_TAKEOFF:
+        return MAV_RESULT_ACCEPTED;
     default:
         return GCS_MAVLINK::handle_command_int_packet(packet, msg);
     }
 }
 
-MAV_RESULT GCS_MAVLINK_Blimp::handle_command_long_packet(const mavlink_command_long_t &packet, const mavlink_message_t &msg)
+bool GCS_MAVLINK_Blimp::mav_frame_for_command_long(MAV_FRAME &frame, MAV_CMD packet_command) const
 {
-    switch (packet.command) {
-
-    case MAV_CMD_NAV_TAKEOFF: {
-        return MAV_RESULT_ACCEPTED;
+    if (packet_command == MAV_CMD_NAV_TAKEOFF) {
+        frame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+        return true;
     }
-
-    case MAV_CMD_CONDITION_YAW:
-        // param1 : target angle [0-360]
-        // param2 : speed during change [deg per second]
-        // param3 : direction (-1:ccw, +1:cw)
-        // param4 : relative offset (1) or absolute angle (0)
-        if ((packet.param1 >= 0.0f)   &&
-            (packet.param1 <= 360.0f) &&
-            (is_zero(packet.param4) || is_equal(packet.param4,1.0f))) {
-            // blimp.flightmode->auto_yaw.set_fixed_yaw(
-            // packet.param1,
-            // packet.param2,
-            // (int8_t)packet.param3,
-            // is_positive(packet.param4));
-            return MAV_RESULT_ACCEPTED;
-        }
-        return MAV_RESULT_FAILED;
-
-    default:
-        return GCS_MAVLINK::handle_command_long_packet(packet, msg);
-    }
+    return GCS_MAVLINK::mav_frame_for_command_long(frame, packet_command);
 }
 
 void GCS_MAVLINK_Blimp::handleMessage(const mavlink_message_t &msg)

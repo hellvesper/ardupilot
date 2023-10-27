@@ -29,6 +29,10 @@
 
 #include "AP_InertialSensor.h"
 
+#ifndef HAL_INS_HIGHRES_SAMPLE
+#define HAL_INS_HIGHRES_SAMPLE 0
+#endif
+
 class AuxiliaryBus;
 class AP_Logger;
 
@@ -284,8 +288,13 @@ protected:
     }
 
     // should fast sampling be enabled on this IMU?
-    bool enable_fast_sampling(uint8_t instance) {
+    bool enable_fast_sampling(uint8_t instance) const {
         return (_imu._fast_sampling_mask & (1U<<instance)) != 0;
+    }
+
+    // should highres sampling be enabled on this IMU?
+    bool enable_highres_sampling(uint8_t instance) const {
+        return (HAL_INS_HIGHRES_SAMPLE & (1U<<instance)) != 0;
     }
 
     // if fast sampling is enabled, the rate to use in kHz
@@ -319,6 +328,8 @@ private:
 
     // logging
     void Write_ACC(const uint8_t instance, const uint64_t sample_us, const Vector3f &accel) const __RAMFUNC__; // Write ACC data packet: raw accel data
-    void Write_GYR(const uint8_t instance, const uint64_t sample_us, const Vector3f &gyro) const __RAMFUNC__;  // Write GYR data packet: raw gyro data
+
+protected:
+    void Write_GYR(const uint8_t instance, const uint64_t sample_us, const Vector3f &gyro, bool use_sample_timestamp=false) const __RAMFUNC__;  // Write GYR data packet: raw gyro data
 
 };

@@ -508,8 +508,10 @@ static const ap_message STREAM_EXTENDED_STATUS_msgs[] = {
     MSG_CURRENT_WAYPOINT, // MISSION_CURRENT
     MSG_GPS_RAW,
     MSG_GPS_RTK,
+#if GPS_MAX_RECEIVERS > 1
     MSG_GPS2_RAW,
     MSG_GPS2_RTK,
+#endif
     MSG_NAV_CONTROLLER_OUTPUT,
 #if AP_FENCE_ENABLED
     MSG_FENCE_STATUS,
@@ -543,7 +545,9 @@ static const ap_message STREAM_EXTRA3_msgs[] = {
 #if AP_TERRAIN_AVAILABLE
     MSG_TERRAIN,
 #endif
+#if AP_BATTERY_ENABLED
     MSG_BATTERY_STATUS,
+#endif
     MSG_GIMBAL_DEVICE_ATTITUDE_STATUS,
     MSG_OPTICAL_FLOW,
 #if COMPASS_CAL_ENABLED
@@ -567,7 +571,9 @@ static const ap_message STREAM_PARAMS_msgs[] = {
 };
 static const ap_message STREAM_ADSB_msgs[] = {
     MSG_ADSB_VEHICLE,
+#if AP_AIS_ENABLED
     MSG_AIS_VESSEL,
+#endif
 };
 
 const struct GCS_MAVLINK::stream_entries GCS_MAVLINK::all_stream_entries[] = {
@@ -770,6 +776,10 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_int_packet(const mavlink_command_i
     case MAV_CMD_DO_MOTOR_TEST:
         return handle_MAV_CMD_DO_MOTOR_TEST(packet);
 
+    case MAV_CMD_NAV_TAKEOFF:
+    case MAV_CMD_NAV_VTOL_TAKEOFF:
+        return handle_MAV_CMD_NAV_TAKEOFF(packet);
+
 #if PARACHUTE == ENABLED
     case MAV_CMD_DO_PARACHUTE:
         return handle_MAV_CMD_DO_PARACHUTE(packet);
@@ -847,30 +857,36 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_mount(const mavlink_command_int_t 
 }
 #endif
 
-MAV_RESULT GCS_MAVLINK_Copter::handle_command_long_packet(const mavlink_command_long_t &packet, const mavlink_message_t &msg)
+MAV_RESULT GCS_MAVLINK_Copter::handle_MAV_CMD_NAV_TAKEOFF(const mavlink_command_int_t &packet)
 {
-    switch(packet.command) {
+    if (packet.frame != MAV_FRAME_GLOBAL_RELATIVE_ALT) {
+        return MAV_RESULT_DENIED;  // meaning some parameters are bad
+    }
 
-    case MAV_CMD_NAV_VTOL_TAKEOFF:
-    case MAV_CMD_NAV_TAKEOFF: {
         // param3 : horizontal navigation by pilot acceptable
         // param4 : yaw angle   (not supported)
         // param5 : latitude    (not supported)
         // param6 : longitude   (not supported)
         // param7 : altitude [metres]
 
-        float takeoff_alt = packet.param7 * 100;      // Convert m to cm
+        float takeoff_alt = packet.z * 100;      // Convert m to cm
 
         if (!copter.flightmode->do_user_takeoff(takeoff_alt, is_zero(packet.param3))) {
             return MAV_RESULT_FAILED;
         }
         return MAV_RESULT_ACCEPTED;
-    }
-
-    default:
-        return GCS_MAVLINK::handle_command_long_packet(packet, msg);
-    }
 }
+
+bool GCS_MAVLINK_Copter::mav_frame_for_command_long(MAV_FRAME &frame, MAV_CMD packet_command) const
+{
+    if (packet_command == MAV_CMD_NAV_TAKEOFF ||
+        packet_command == MAV_CMD_NAV_VTOL_TAKEOFF) {
+        frame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+        return true;
+    }
+    return GCS_MAVLINK::mav_frame_for_command_long(frame, packet_command);
+}
+
 
 MAV_RESULT GCS_MAVLINK_Copter::handle_MAV_CMD_CONDITION_YAW(const mavlink_command_int_t &packet)
 {

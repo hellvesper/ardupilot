@@ -761,6 +761,30 @@ bool AP_InertialSensor::register_gyro(uint8_t &instance, uint16_t raw_sample_rat
 }
 
 /*
+  get the accel instance number we will get from register_accel()
+ */
+bool AP_InertialSensor::get_accel_instance(uint8_t &instance) const
+{
+    if (_accel_count == INS_MAX_INSTANCES) {
+        return false;
+    }
+    instance = _accel_count;
+    return true;
+}
+
+/*
+  get the gyro instance number we will get from register_accel()
+ */
+bool AP_InertialSensor::get_gyro_instance(uint8_t &instance) const
+{
+    if (_gyro_count == INS_MAX_INSTANCES) {
+        return false;
+    }
+    instance = _gyro_count;
+    return true;
+}
+
+/*
   register a new accel instance
  */
 bool AP_InertialSensor::register_accel(uint8_t &instance, uint16_t raw_sample_rate_hz, uint32_t id)
@@ -894,6 +918,11 @@ AP_InertialSensor::init(uint16_t loop_rate)
     // time to be exposed outside of INS. Large deltat values can
     // cause divergence of state estimators
     _loop_delta_t_max = 10 * _loop_delta_t;
+
+    // Initialize notch params
+    for (auto &notch : harmonic_notches) {
+        notch.params.init();
+    }
 
     if (_gyro_count == 0 && _accel_count == 0) {
         _start_backends();

@@ -157,6 +157,36 @@ void GCS_MAVLINK_Plane::send_attitude() const
         omega.z);
 }
 
+void GCS_MAVLINK_Plane::send_attitude_target() 
+{
+#if HAL_QUADPLANE_ENABLED
+    // Check if the attitude target is valid for reporting
+    const uint32_t now = AP_HAL::millis();
+    if (now  - plane.quadplane.last_att_control_ms > 100) {
+        return;
+    }
+
+    const Quaternion quat  = plane.quadplane.attitude_control->get_attitude_target_quat();
+    const Vector3f& ang_vel = plane.quadplane.attitude_control->get_attitude_target_ang_vel();
+    const float throttle = plane.quadplane.attitude_control->get_throttle_in();
+
+    const float quat_out[4] {quat.q1, quat.q2, quat.q3, quat.q4};
+
+    const uint16_t typemask = 0; 
+
+    mavlink_msg_attitude_target_send(
+        chan,
+        now,                    // time since boot (ms)
+        typemask,               // Bitmask that tells the system what control dimensions should be ignored by the vehicle
+        quat_out,               // Target attitude quaternion [w, x, y, z] order, zero-rotation is [1, 0, 0, 0], unit-length
+        ang_vel.x,              // bodyframe target roll rate (rad/s)
+        ang_vel.y,              // bodyframe target pitch rate (rad/s)
+        ang_vel.z,              // bodyframe yaw rate (rad/s)
+        throttle);              // Collective thrust, normalized to 0 .. 1
+
+#endif // HAL_QUADPLANE_ENABLED 
+}
+
 void GCS_MAVLINK_Plane::send_aoa_ssa()
 {
     AP_AHRS &ahrs = AP::ahrs();
@@ -593,8 +623,10 @@ static const ap_message STREAM_EXTENDED_STATUS_msgs[] = {
     MSG_CURRENT_WAYPOINT,
     MSG_GPS_RAW,
     MSG_GPS_RTK,
+#if GPS_MAX_RECEIVERS > 1
     MSG_GPS2_RAW,
     MSG_GPS2_RTK,
+#endif
     MSG_NAV_CONTROLLER_OUTPUT,
 #if AP_FENCE_ENABLED
     MSG_FENCE_STATUS,
@@ -643,7 +675,9 @@ static const ap_message STREAM_EXTRA3_msgs[] = {
 #if AP_TERRAIN_AVAILABLE
     MSG_TERRAIN,
 #endif
+#if AP_BATTERY_ENABLED
     MSG_BATTERY_STATUS,
+#endif
     MSG_GIMBAL_DEVICE_ATTITUDE_STATUS,
     MSG_OPTICAL_FLOW,
 #if COMPASS_CAL_ENABLED
@@ -658,7 +692,9 @@ static const ap_message STREAM_PARAMS_msgs[] = {
 };
 static const ap_message STREAM_ADSB_msgs[] = {
     MSG_ADSB_VEHICLE,
+#if AP_AIS_ENABLED
     MSG_AIS_VESSEL,
+#endif
 };
 
 const struct GCS_MAVLINK::stream_entries GCS_MAVLINK::all_stream_entries[] = {
@@ -772,7 +808,7 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_do_reposition(const mavlink_com
         return MAV_RESULT_DENIED;
     }
 
-    if (is_zero(packet.param4)) {
+    if (isnan(packet.param4) || is_zero(packet.param4)) {
         requested_position.loiter_ccw = 0;
     } else {
         requested_position.loiter_ccw = 1;
@@ -977,7 +1013,7 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
 
 #if AP_ICENGINE_ENABLED
     case MAV_CMD_DO_ENGINE_CONTROL:
-        if (!plane.g2.ice_control.engine_control(packet.param1, packet.param2, packet.param3)) {
+        if (!plane.g2.ice_control.engine_control(packet.param1, packet.param2, packet.param3, (uint32_t)packet.param4)) {
             return MAV_RESULT_FAILED;
         }
         return MAV_RESULT_ACCEPTED;
@@ -997,6 +1033,9 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
 
     case MAV_CMD_DO_VTOL_TRANSITION:
         return handle_command_DO_VTOL_TRANSITION(packet);
+
+    case MAV_CMD_NAV_TAKEOFF:
+        return handle_command_MAV_CMD_NAV_TAKEOFF(packet);
 #endif
 
     case MAV_CMD_DO_GO_AROUND:
@@ -1009,6 +1048,18 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_int_packet(const mavlink_command_in
             return MAV_RESULT_ACCEPTED;
         }
         return MAV_RESULT_FAILED;
+
+    case MAV_CMD_MISSION_START:
+        plane.set_mode(plane.mode_auto, ModeReason::GCS_COMMAND);
+        return MAV_RESULT_ACCEPTED;
+
+    case MAV_CMD_NAV_LOITER_UNLIM:
+        plane.set_mode(plane.mode_loiter, ModeReason::GCS_COMMAND);
+        return MAV_RESULT_ACCEPTED;
+
+    case MAV_CMD_NAV_RETURN_TO_LAUNCH:
+        plane.set_mode(plane.mode_rtl, ModeReason::GCS_COMMAND);
+        return MAV_RESULT_ACCEPTED;
 
     default:
         return GCS_MAVLINK::handle_command_int_packet(packet, msg);
@@ -1033,38 +1084,56 @@ MAV_RESULT GCS_MAVLINK_Plane::handle_command_DO_CHANGE_SPEED(const mavlink_comma
         return MAV_RESULT_FAILED;
 }
 
-MAV_RESULT GCS_MAVLINK_Plane::handle_command_long_packet(const mavlink_command_long_t &packet, const mavlink_message_t &msg)
-{
-    switch(packet.command) {
-
-    case MAV_CMD_NAV_LOITER_UNLIM:
-        plane.set_mode(plane.mode_loiter, ModeReason::GCS_COMMAND);
-        return MAV_RESULT_ACCEPTED;
-
-    case MAV_CMD_NAV_RETURN_TO_LAUNCH:
-        plane.set_mode(plane.mode_rtl, ModeReason::GCS_COMMAND);
-        return MAV_RESULT_ACCEPTED;
-
 #if HAL_QUADPLANE_ENABLED
-    case MAV_CMD_NAV_TAKEOFF: {
-        // user takeoff only works with quadplane code for now
-        // param7 : altitude [metres]
-        float takeoff_alt = packet.param7;
-        if (plane.quadplane.available() && plane.quadplane.do_user_takeoff(takeoff_alt)) {
-            return MAV_RESULT_ACCEPTED;
-        }
+void GCS_MAVLINK_Plane::convert_MAV_CMD_NAV_TAKEOFF_to_COMMAND_INT(const mavlink_command_long_t &in, mavlink_command_int_t &out)
+{
+    // convert to MAV_FRAME_LOCAL_OFFSET_NED, "NED local tangent frame
+    // with origin that travels with the vehicle"
+    out = {};
+    out.target_system = in.target_system;
+    out.target_component = in.target_component;
+    out.frame = MAV_FRAME_LOCAL_OFFSET_NED;
+    out.command = in.command;
+    // out.current = 0;
+    // out.autocontinue = 0;
+    // out.param1 = in.param1;  // we only use the "z" parameter in this command:
+    // out.param2 = in.param2;
+    // out.param3 = in.param3;
+    // out.param4 = in.param4;
+    // out.x = 0;  // we don't handle positioning when doing takeoffs
+    // out.y = 0;
+    out.z = -in.param7;  // up -> down
+}
+
+void GCS_MAVLINK_Plane::convert_COMMAND_LONG_to_COMMAND_INT(const mavlink_command_long_t &in, mavlink_command_int_t &out, MAV_FRAME frame)
+{
+    switch (in.command) {
+    case MAV_CMD_NAV_TAKEOFF:
+        convert_MAV_CMD_NAV_TAKEOFF_to_COMMAND_INT(in, out);
+        return;
+    }
+    return GCS_MAVLINK::convert_COMMAND_LONG_to_COMMAND_INT(in, out, frame);
+}
+
+MAV_RESULT GCS_MAVLINK_Plane::handle_command_MAV_CMD_NAV_TAKEOFF(const mavlink_command_int_t &packet)
+{
+    float takeoff_alt = packet.z;
+    switch (packet.frame) {
+    case MAV_FRAME_LOCAL_OFFSET_NED:  // "NED local tangent frame with origin that travels with the vehicle"
+        takeoff_alt = -takeoff_alt;  // down -> up
+        break;
+    default:
+        return MAV_RESULT_DENIED; // "is supported but has invalid parameters"
+    }
+    if (!plane.quadplane.available()) {
         return MAV_RESULT_FAILED;
     }
-#endif  // HAL_QUADPLANE_ENABLED
-
-    case MAV_CMD_MISSION_START:
-        plane.set_mode(plane.mode_auto, ModeReason::GCS_COMMAND);
-        return MAV_RESULT_ACCEPTED;
-
-    default:
-        return GCS_MAVLINK::handle_command_long_packet(packet, msg);
+    if (!plane.quadplane.do_user_takeoff(takeoff_alt)) {
+        return MAV_RESULT_FAILED;
     }
+    return MAV_RESULT_ACCEPTED;
 }
+#endif
 
 MAV_RESULT GCS_MAVLINK_Plane::handle_MAV_CMD_DO_AUTOTUNE_ENABLE(const mavlink_command_int_t &packet)
 {

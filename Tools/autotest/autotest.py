@@ -36,7 +36,7 @@ import examples
 from pysim import util
 from pymavlink.generator import mavtemplate
 
-from common import Test
+from vehicle_test_suite import Test
 
 tester = None
 
@@ -98,7 +98,7 @@ def build_binaries():
 
 def build_examples(**kwargs):
     """Build examples."""
-    for target in 'fmuv2', 'Pixhawk1', 'navio', 'linux':
+    for target in 'Pixhawk1', 'navio', 'linux':
         print("Running build.examples for %s" % target)
         try:
             util.build_examples(target, **kwargs)

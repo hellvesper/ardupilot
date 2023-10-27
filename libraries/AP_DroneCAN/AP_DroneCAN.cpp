@@ -130,7 +130,7 @@ const AP_Param::GroupInfo AP_DroneCAN::var_info[] = {
 
     // @Param: ESC_OF
     // @DisplayName: ESC Output channels offset
-    // @Description: Offset for ESC numbering in DroneCAN ESC RawCommand messages. This allows for more efficient packing of ESC command messages. If your ESCs are on servo functions 5 to 8 and you set this parameter to 4 then the ESC RawCommand will be sent with the first 4 slots filled. This can be used for more efficint usage of CAN bandwidth
+    // @Description: Offset for ESC numbering in DroneCAN ESC RawCommand messages. This allows for more efficient packing of ESC command messages. If your ESCs are on servo functions 5 to 8 and you set this parameter to 4 then the ESC RawCommand will be sent with the first 4 slots filled. This can be used for more efficient usage of CAN bandwidth
     // @Range: 0 18
     // @User: Advanced
     AP_GROUPINFO("ESC_OF", 7, AP_DroneCAN, _esc_offset, 0),
@@ -391,7 +391,7 @@ void AP_DroneCAN::loop(void)
         send_node_status();
         _dna_server.verify_nodes();
 
-#if AP_DRONECAN_SEND_GPS
+#if AP_DRONECAN_SEND_GPS && AP_GPS_DRONECAN_ENABLED
         if (option_is_set(AP_DroneCAN::Options::SEND_GNSS) && !AP_GPS_DroneCAN::instance_exists(this)) {
             // send if enabled and this interface/driver is not used by the AP_GPS driver
             gnss_send_fix();

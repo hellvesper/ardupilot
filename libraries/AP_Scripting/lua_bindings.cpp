@@ -215,6 +215,7 @@ int lua_mavlink_block_command(lua_State *L) {
 }
 #endif // HAL_GCS_ENABLED
 
+#if AP_MISSION_ENABLED
 int lua_mission_receive(lua_State *L) {
     binding_argcheck(L, 0);
 
@@ -242,6 +243,7 @@ int lua_mission_receive(lua_State *L) {
 
     return 5;
 }
+#endif // AP_MISSION_ENABLED
 
 #if HAL_LOGGING_ENABLED
 int AP_Logger_Write(lua_State *L) {
@@ -630,7 +632,7 @@ int AP_HAL__I2CDevice_read_registers(lua_State *L) {
     return success;
 }
 
-#if HAL_MAX_CAN_PROTOCOL_DRIVERS
+#if AP_SCRIPTING_CAN_SENSOR_ENABLED
 int lua_get_CAN_device(lua_State *L) {
 
     // Allow : and . access
@@ -680,7 +682,7 @@ int lua_get_CAN_device2(lua_State *L) {
 
     return 1;
 }
-#endif // HAL_MAX_CAN_PROTOCOL_DRIVERS
+#endif // AP_SCRIPTING_CAN_SENSOR_ENABLED
 
 /*
   directory listing, return table of files in a directory

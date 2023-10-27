@@ -55,6 +55,7 @@
 #include "AP_RangeFinder_NoopLoop.h"
 #include "AP_RangeFinder_TOFSenseP_CAN.h"
 #include "AP_RangeFinder_NRA24_CAN.h"
+#include "AP_RangeFinder_TOFSenseF_I2C.h"
 
 #include <AP_BoardConfig/AP_BoardConfig.h>
 #include <AP_Logger/AP_Logger.h>
@@ -535,7 +536,7 @@ void RangeFinder::detect_instance(uint8_t instance, uint8_t& serial_instance)
         break;
 
     case Type::Lua_Scripting:
-#if AP_SCRIPTING_ENABLED
+#if AP_RANGEFINDER_LUA_ENABLED
         _add_backend(new AP_RangeFinder_Lua(state[instance], params[instance]), instance);
 #endif
         break;
@@ -556,6 +557,22 @@ void RangeFinder::detect_instance(uint8_t instance, uint8_t& serial_instance)
         _add_backend(new AP_RangeFinder_NRA24_CAN(state[instance], params[instance]), instance);
 #endif
         break;
+    case Type::TOFSenseF_I2C: {
+#if AP_RANGEFINDER_TOFSENSEF_I2C_ENABLED
+        uint8_t addr = TOFSENSEP_I2C_DEFAULT_ADDR;
+        if (params[instance].address != 0) {
+            addr = params[instance].address;
+        }
+        FOREACH_I2C(i) {
+            if (_add_backend(AP_RangeFinder_TOFSenseF_I2C::detect(state[instance], params[instance],
+                                                                  hal.i2c_mgr->get_device(i, addr)),
+                             instance)) {
+                break;
+            }
+        }
+        break;
+#endif
+    }
 
     case Type::NONE:
         break;
@@ -768,6 +785,10 @@ void RangeFinder::Log_RFND() const
             continue;
         }
 
+        int8_t signal_quality;
+        if (!s->get_signal_quality_pct(signal_quality)) {
+          signal_quality = -1;
+        }
         const struct log_RFND pkt = {
                 LOG_PACKET_HEADER_INIT(LOG_RFND_MSG),
                 time_us      : AP_HAL::micros64(),
@@ -775,6 +796,7 @@ void RangeFinder::Log_RFND() const
                 dist         : s->distance_cm(),
                 status       : (uint8_t)s->status(),
                 orient       : s->orientation(),
+                quality      : signal_quality,
         };
         AP::logger().WriteBlock(&pkt, sizeof(pkt));
     }

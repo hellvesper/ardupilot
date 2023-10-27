@@ -1,5 +1,5 @@
 /**
- * C preprocesor enumeration of the boards supported by the AP_HAL.
+ * C preprocessor enumeration of the boards supported by the AP_HAL.
  * This list exists so HAL_BOARD == HAL_BOARD_xxx preprocessor blocks
  * can be used to exclude HAL boards from the build when appropriate.
  * It's not an elegant solution but we can improve it in future.
@@ -301,6 +301,10 @@
 #else
 #define HAL_SERIAL_ESC_COMM_ENABLED 1
 #endif
+#endif
+
+#ifndef AP_BOOTLOADER_FLASHING_ENABLED
+#define AP_BOOTLOADER_FLASHING_ENABLED 0
 #endif
 
 #ifndef HAL_HNF_MAX_FILTERS

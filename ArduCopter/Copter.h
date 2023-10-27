@@ -234,7 +234,10 @@ public:
     friend class ModeZigZag;
     friend class ModeAutorotate;
     friend class ModeTurtle;
-    friend class AP_ExternalControl_Copter;
+
+    friend class _AutoTakeoff;
+
+    friend class PayloadPlace;
 
     Copter(void);
 

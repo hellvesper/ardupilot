@@ -15,15 +15,17 @@ from pymavlink import quaternion
 from pymavlink import mavextra
 from pymavlink import mavutil
 
-from common import AutoTest
-from common import AutoTestTimeoutException
-from common import NotAchievedException
-from common import PreconditionFailedException
-from common import WaitModeTimeout
-from common import OldpymavlinkException
-from common import Test
-
 from pymavlink.rotmat import Vector3
+
+import vehicle_test_suite
+
+from vehicle_test_suite import AutoTestTimeoutException
+from vehicle_test_suite import NotAchievedException
+from vehicle_test_suite import OldpymavlinkException
+from vehicle_test_suite import PreconditionFailedException
+from vehicle_test_suite import Test
+from vehicle_test_suite import WaitModeTimeout
+
 from pysim import vehicleinfo
 from pysim import util
 
@@ -35,7 +37,7 @@ SITL_START_LOCATION = mavutil.location(-35.362938, 149.165085, 585, 354)
 WIND = "0,180,0.2"  # speed,direction,variance
 
 
-class AutoTestPlane(AutoTest):
+class AutoTestPlane(vehicle_test_suite.TestSuite):
     @staticmethod
     def get_not_armable_mode_list():
         return []
@@ -1835,6 +1837,82 @@ class AutoTestPlane(AutoTest):
         self.wait_circling_point_with_radius(fence_loc, return_radius)
         self.do_fence_disable() # Disable fence so we can land
         self.fly_home_land_and_disarm() # Pack it up, we're going home.
+
+    def TerrainRally(self):
+        """ Tests terrain follow with a rally point """
+        self.context_push()
+        self.install_terrain_handlers_context()
+
+        def terrain_following_above_80m(mav, m):
+            if m.get_type() == 'TERRAIN_REPORT':
+                if m.current_height < 50:
+                    raise NotAchievedException(
+                        "TERRAIN_REPORT.current_height below 50m %fm" % m.current_height)
+            if m.get_type() == 'VFR_HUD':
+                if m.groundspeed < 2:
+                    raise NotAchievedException("hit ground")
+
+        def terrain_wait_path(loc1, loc2, steps):
+            '''wait till we have terrain for N steps from loc1 to loc2'''
+            tstart = self.get_sim_time_cached()
+            self.progress("Waiting for terrain data")
+            while True:
+                now = self.get_sim_time_cached()
+                if now - tstart > 60:
+                    raise NotAchievedException("Did not get correct required terrain")
+                for i in range(steps):
+                    lat = loc1.lat + i * (loc2.lat-loc1.lat)/steps
+                    lon = loc1.lng + i * (loc2.lng-loc1.lng)/steps
+                    self.mav.mav.terrain_check_send(int(lat*1.0e7), int(lon*1.0e7))
+
+                report = self.assert_receive_message('TERRAIN_REPORT', timeout=60)
+                self.progress("Terrain pending=%u" % report.pending)
+                if report.pending == 0:
+                    break
+            self.progress("Got required terrain")
+
+        self.wait_ready_to_arm()
+        self.homeloc = self.mav.location()
+
+        guided_loc = mavutil.location(-35.39723762, 149.07284612, 99.0, 0)
+        rally_loc = mavutil.location(-35.3654952000, 149.1558698000, 100, 0)
+
+        terrain_wait_path(self.homeloc, rally_loc, 10)
+
+        # set a rally point to the west of home
+        self.upload_rally_points_from_locations([rally_loc])
+
+        self.set_parameter("TKOFF_ALT", 100)
+        self.change_mode("TAKEOFF")
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.set_parameter("TERRAIN_FOLLOW", 1)
+        self.wait_altitude(90, 120, timeout=30, relative=True)
+        self.progress("Done takeoff")
+
+        self.install_message_hook_context(terrain_following_above_80m)
+
+        self.change_mode("GUIDED")
+        self.do_reposition(guided_loc, frame=mavutil.mavlink.MAV_FRAME_GLOBAL_TERRAIN_ALT)
+        self.progress("Flying to guided location")
+        self.wait_location(guided_loc,
+                           accuracy=200,
+                           target_altitude=None,
+                           timeout=600)
+
+        self.progress("Reached guided location")
+        self.set_parameter("RALLY_LIMIT_KM", 50)
+        self.change_mode("RTL")
+        self.progress("Flying to rally point")
+        self.wait_location(rally_loc,
+                           accuracy=200,
+                           target_altitude=None,
+                           timeout=600)
+        self.progress("Reached rally point")
+
+        self.context_pop()
+        self.disarm_vehicle(force=True)
+        self.reboot_sitl()
 
     def Parachute(self):
         '''Test Parachute'''
@@ -5015,6 +5093,73 @@ class AutoTestPlane(AutoTest):
 
         self.mavproxy.interact()
 
+    def MAV_CMD_MISSION_START(self):
+        '''test MAV_CMD_MISSION_START starts AUTO'''
+        self.upload_simple_relhome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 800, 0, 0),
+        ])
+        for run_cmd in self.run_cmd, self.run_cmd_int:
+            self.change_mode('LOITER')
+            run_cmd(mavutil.mavlink.MAV_CMD_MISSION_START)
+            self.wait_mode('AUTO')
+
+    def MAV_CMD_NAV_LOITER_UNLIM(self):
+        '''test receiving MAV_CMD_NAV_LOITER_UNLIM from GCS'''
+        self.takeoff(10)
+        self.run_cmd(mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM)
+        self.wait_mode('LOITER')
+        self.change_mode('GUIDED')
+        self.run_cmd_int(mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM)
+        self.wait_mode('LOITER')
+        self.fly_home_land_and_disarm()
+
+    def MAV_CMD_NAV_RETURN_TO_LAUNCH(self):
+        '''test receiving MAV_CMD_NAV_RETURN_TO_LAUNCH from GCS'''
+        self.set_parameter('RTL_AUTOLAND', 1)
+        self.start_flying_simple_rehome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 30),
+            (mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM, 0, 0, 30),
+            self.create_MISSION_ITEM_INT(
+                mavutil.mavlink.MAV_CMD_DO_LAND_START,
+            ),
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 800, 0, 0),
+        ])
+
+        for i in self.run_cmd, self.run_cmd_int:
+            self.wait_current_waypoint(2)
+            self.run_cmd(mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH)
+            self.wait_current_waypoint(4)
+            self.set_current_waypoint(2)
+        self.fly_home_land_and_disarm()
+
+    def location_from_ADSB_VEHICLE(self, m):
+        '''return a mavutil.location extracted from an ADSB_VEHICLE mavlink
+        message'''
+        if m.altitude_type != mavutil.mavlink.ADSB_ALTITUDE_TYPE_GEOMETRIC:
+            raise ValueError("Expected geometric alt")
+        return mavutil.location(
+            m.lat*1e-7,
+            m.lon*1e-7,
+            m.altitude/1000.0585,  # mm -> m
+            m.heading * 0.01  # centidegrees -> degrees
+        )
+
+    def SagetechMXS(self):
+        '''test Sagetech MXS ADSB device driver'''
+        sim_name = "sagetech_mxs"
+        self.set_parameters({
+            "SERIAL5_PROTOCOL": 35,
+            "ADSB_TYPE": 4,  # Sagetech-MXS
+            "SIM_ADSB_TYPES": 8,  # Sagetech-MXS
+            "SIM_ADSB_COUNT": 5,
+        })
+        self.customise_SITL_commandline(["--serial5=sim:%s" % sim_name])
+        m = self.assert_receive_message("ADSB_VEHICLE")
+        adsb_vehicle_loc = self.location_from_ADSB_VEHICLE(m)
+        self.progress("ADSB Vehicle at loc %s" % str(adsb_vehicle_loc))
+        home = self.home_position_as_mav_location()
+        self.assert_distance(home, adsb_vehicle_loc, 0, 10000)
+
     def tests(self):
         '''return list of all tests'''
         ret = super(AutoTestPlane, self).tests()
@@ -5106,6 +5251,7 @@ class AutoTestPlane(AutoTest):
             self.NoArmWithoutMissionItems,
             self.MODE_SWITCH_RESET,
             self.ExternalPositionEstimate,
+            self.SagetechMXS,
             self.MAV_CMD_GUIDED_CHANGE_ALTITUDE,
             self.MAV_CMD_PREFLIGHT_CALIBRATION,
             self.MAV_CMD_DO_INVERTED_FLIGHT,
@@ -5114,6 +5260,10 @@ class AutoTestPlane(AutoTest):
             self.MAV_CMD_DO_FLIGHTTERMINATION,
             self.MAV_CMD_DO_LAND_START,
             self.InteractTest,
+            self.MAV_CMD_MISSION_START,
+            self.TerrainRally,
+            self.MAV_CMD_NAV_LOITER_UNLIM,
+            self.MAV_CMD_NAV_RETURN_TO_LAUNCH,
         ])
         return ret
 

@@ -84,12 +84,13 @@ public:
     uint8_t num_i2c_devices;
     AP_HAL::OwnPtr<AP_HAL::I2CDevice> *_i2c_dev[SCRIPTING_MAX_NUM_I2C_DEVICE];
 
-#if HAL_MAX_CAN_PROTOCOL_DRIVERS
+#if AP_SCRIPTING_CAN_SENSOR_ENABLED
     // Scripting CAN sensor
     ScriptingCANSensor *_CAN_dev;
     ScriptingCANSensor *_CAN_dev2;
 #endif
 
+#if AP_MISSION_ENABLED
     // mission item buffer
     static const int mission_cmd_queue_size = 5;
     struct scripting_mission_cmd {
@@ -100,6 +101,7 @@ public:
         uint32_t time_ms;
     };
     ObjectBuffer<struct scripting_mission_cmd> * mission_data;
+#endif
 
     // PWMSource storage
     uint8_t num_pwm_source;

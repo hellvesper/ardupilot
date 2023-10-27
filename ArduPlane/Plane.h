@@ -246,7 +246,7 @@ private:
 #endif
 
 #if HAL_RALLY_ENABLED
-    // Rally Ponints
+    // Rally Points
     AP_Rally rally;
 #endif
 
@@ -312,7 +312,7 @@ private:
 
     // Failsafe
     struct {
-        // Used to track if the value on channel 3 (throtttle) has fallen below the failsafe threshold
+        // Used to track if the value on channel 3 (throttle) has fallen below the failsafe threshold
         // RC receiver should be set up to output a low throttle value when signal is lost
         bool rc_failsafe;
 
@@ -618,7 +618,7 @@ private:
     // The instantaneous desired pitch angle.  Hundredths of a degree
     int32_t nav_pitch_cd;
 
-    // the aerodymamic load factor. This is calculated from the demanded
+    // the aerodynamic load factor. This is calculated from the demanded
     // roll before the roll is clipped, using 1/sqrt(cos(nav_roll))
     float aerodynamic_load_factor = 1.0f;
 
@@ -735,6 +735,9 @@ private:
         // are we trying to follow terrain?
         bool terrain_following;
 
+        // are we waiting to load terrain data to init terrain following
+        bool terrain_following_pending;
+
         // target altitude above terrain in cm, valid if terrain_following
         // is set
         int32_t terrain_alt_cm;
@@ -771,7 +774,7 @@ private:
     AP_Mount camera_mount;
 #endif
 
-    // Arming/Disarming mangement class
+    // Arming/Disarming management class
     AP_Arming_Plane arming;
 
     AP_Param param_loader {var_info};
@@ -855,7 +858,7 @@ private:
     void reset_offset_altitude(void);
     void set_offset_altitude_location(const Location &start_loc, const Location &destination_loc);
     bool above_location_current(const Location &loc);
-    void setup_terrain_target_alt(Location &loc) const;
+    void setup_terrain_target_alt(Location &loc);
     int32_t adjusted_altitude_cm(void);
     int32_t adjusted_relative_altitude_cm(void);
     float mission_alt_offset(void);

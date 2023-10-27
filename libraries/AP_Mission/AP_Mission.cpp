@@ -1247,11 +1247,14 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         cmd.content.do_engine_control.start_control = (packet.param1>0);
         cmd.content.do_engine_control.cold_start = (packet.param2>0);
         cmd.content.do_engine_control.height_delay_cm = packet.param3*100;
+        cmd.content.do_engine_control.allow_disarmed_start = (((uint32_t)packet.param4) & ENGINE_CONTROL_OPTIONS_ALLOW_START_WHILE_DISARMED) != 0;
         break;
 
+#if AP_MISSION_NAV_PAYLOAD_PLACE_ENABLED
     case MAV_CMD_NAV_PAYLOAD_PLACE:
         cmd.p1 = packet.param1*100; // copy max-descend parameter (m->cm)
         break;
+#endif
 
     case MAV_CMD_NAV_SET_YAW_SPEED:
         cmd.content.set_yaw_speed.angle_deg = packet.param1;        // target angle in degrees
@@ -1751,11 +1754,16 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
         packet.param1 = cmd.content.do_engine_control.start_control?1:0;
         packet.param2 = cmd.content.do_engine_control.cold_start?1:0;
         packet.param3 = cmd.content.do_engine_control.height_delay_cm*0.01f;
+        if (cmd.content.do_engine_control.allow_disarmed_start) {
+            packet.param4 = ENGINE_CONTROL_OPTIONS_ALLOW_START_WHILE_DISARMED;
+        }
         break;
 
+#if AP_MISSION_NAV_PAYLOAD_PLACE_ENABLED
     case MAV_CMD_NAV_PAYLOAD_PLACE:
         packet.param1 = cmd.p1/100.0f; // copy max-descend parameter (cm->m)
         break;
+#endif
 
     case MAV_CMD_NAV_SET_YAW_SPEED:
         packet.param1 = cmd.content.set_yaw_speed.angle_deg;        // target angle in degrees
@@ -2613,8 +2621,10 @@ const char *AP_Mission::Mission_Command::type() const
     case MAV_CMD_DO_GRIPPER:
         return "Gripper";
 #endif
+#if AP_MISSION_NAV_PAYLOAD_PLACE_ENABLED
     case MAV_CMD_NAV_PAYLOAD_PLACE:
         return "PayloadPlace";
+#endif
     case MAV_CMD_DO_PARACHUTE:
         return "Parachute";
     case MAV_CMD_DO_SPRAYER:

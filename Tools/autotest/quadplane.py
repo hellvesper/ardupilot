@@ -13,9 +13,9 @@ import math
 from pymavlink import mavutil
 from pymavlink.rotmat import Vector3
 
-from common import AutoTest
-from common import Test
-from common import AutoTestTimeoutException, NotAchievedException, PreconditionFailedException
+import vehicle_test_suite
+from vehicle_test_suite import Test
+from vehicle_test_suite import AutoTestTimeoutException, NotAchievedException, PreconditionFailedException
 
 import operator
 
@@ -26,7 +26,7 @@ WIND = "0,180,0.2"  # speed,direction,variance
 SITL_START_LOCATION = mavutil.location(-27.274439, 151.290064, 343, 8.7)
 
 
-class AutoTestQuadPlane(AutoTest):
+class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
 
     @staticmethod
     def get_not_armable_mode_list():
@@ -352,7 +352,8 @@ class AutoTestQuadPlane(AutoTest):
         self.change_mode("QLAND")
         self.wait_altitude(0, 2, relative=True, timeout=60)
         self.wait_extended_sys_state(mavutil.mavlink.MAV_VTOL_STATE_MC,
-                                     mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND)
+                                     mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND,
+                                     timeout=30)
         self.mav.motors_disarmed_wait()
 
     def EXTENDED_SYS_STATE(self):
@@ -1442,6 +1443,76 @@ class AutoTestQuadPlane(AutoTest):
 
         self.fly_home_land_and_disarm()
 
+    def MAV_CMD_NAV_TAKEOFF(self):
+        '''test issuing takeoff command via mavlink'''
+        self.change_mode('GUIDED')
+        self.wait_ready_to_arm()
+
+        self.arm_vehicle()
+        self.run_cmd(mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, p7=5)
+        self.wait_altitude(4.5, 5.5, minimum_duration=5, relative=True)
+        self.change_mode('QLAND')
+        self.wait_disarmed()
+
+        self.start_subtest("Check NAV_TAKEOFF is above current location, not home location")
+        self.change_mode('GUIDED')
+        self.wait_ready_to_arm()
+
+        # reset home 20 metres above current location
+        current_alt_abs = self.get_altitude(relative=False)
+
+        loc = self.mav.location()
+
+        home_z_ofs = 20
+        self.run_cmd(
+            mavutil.mavlink.MAV_CMD_DO_SET_HOME,
+            p5=loc.lat,
+            p6=loc.lng,
+            p7=current_alt_abs + home_z_ofs,
+        )
+
+        self.arm_vehicle()
+        takeoff_alt = 5
+        self.run_cmd(mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, p7=takeoff_alt)
+        self.wait_altitude(
+            current_alt_abs + takeoff_alt - 0.5,
+            current_alt_abs + takeoff_alt + 0.5,
+            minimum_duration=5,
+            relative=False,
+        )
+        self.change_mode('QLAND')
+        self.wait_disarmed()
+
+        self.reboot_sitl()  # unlock home position
+
+    def Q_GUIDED_MODE(self):
+        '''test moving in VTOL mode with SET_POSITION_TARGET_GLOBAL_INT'''
+        self.set_parameter('Q_GUIDED_MODE', 1)
+        self.change_mode('GUIDED')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.run_cmd(mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, p7=15)
+        self.wait_altitude(14, 16, relative=True)
+
+        loc = self.mav.location()
+        self.location_offset_ne(loc, 50, 50)
+
+        # set position target
+        self.run_cmd_int(
+            mavutil.mavlink.MAV_CMD_DO_REPOSITION,
+            0,
+            1,  # reposition flags; 1 means "change to guided"
+            0,
+            0,
+            int(loc.lat * 1e7),
+            int(loc.lng * 1e7),
+            30,    # alt
+            frame=mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+        )
+        self.wait_location(loc, timeout=120)
+
+        self.fly_home_land_and_disarm()
+
     def tests(self):
         '''return list of all tests'''
 
@@ -1480,5 +1551,7 @@ class AutoTestQuadPlane(AutoTest):
             self.RCDisableAirspeedUse,
             self.mission_MAV_CMD_DO_VTOL_TRANSITION,
             self.mavlink_MAV_CMD_DO_VTOL_TRANSITION,
+            self.MAV_CMD_NAV_TAKEOFF,
+            self.Q_GUIDED_MODE,
         ])
         return ret
