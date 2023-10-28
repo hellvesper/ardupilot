@@ -52,8 +52,9 @@ void RCOutput::init()
 
 
     //32 and 33 are special as they dont default to gpio, but can be if u disable their rtc setup:
-    rtc_gpio_deinit(GPIO_NUM_32);
-    rtc_gpio_deinit(GPIO_NUM_33);
+    // Note: there is no RTC pins above 27 in S3 chip (https://github.com/Freenove/Freenove_ESP32_S3_WROOM_Board/blob/main/Datasheet/ESP32_S3/esp32-s3_technical_reference_manual_en.pdf)
+//    rtc_gpio_deinit(GPIO_NUM_32);
+//    rtc_gpio_deinit(GPIO_NUM_33);
 
     printf("oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n");
     printf("RCOutput::init() - channels available: %d \n",(int)MAX_CHANNELS);
