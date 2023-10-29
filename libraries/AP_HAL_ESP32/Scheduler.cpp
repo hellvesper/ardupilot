@@ -32,7 +32,8 @@
 #include <AP_Scheduler/AP_Scheduler.h>
 #include <stdio.h>
 
-//#define SCHEDULERDEBUG 1
+// #define SCHEDULERDEBUG 1
+//#define SCHEDDEBUG 1
 
 using namespace ESP32;
 
@@ -119,7 +120,11 @@ void Scheduler::init()
     	hal.console->printf("OK created task _storage_thread\n");
     }
 
-    //   xTaskCreate(_print_profile, "APM_PROFILE", IO_SS, this, IO_PRIO, nullptr);
+    if (xTaskCreate(_print_profile, "APM_PROFILE", IO_SS, this, IO_PRIO, nullptr) != pdPASS) {
+        hal.console->printf("FAILED to create task _print_profile\n");
+    } else {
+        hal.console->printf("OK created task _print_profile\n");
+    }
 
 //    disableCore0WDT(); // You should feed the Watchdog Timer instead of disabling it completely.
 //    disableCore1WDT(); // You should feed the Watchdog Timer instead of disabling it completely.
@@ -302,6 +307,12 @@ void Scheduler::_timer_thread(void *arg)
 
 #if HAL_INS_DEFAULT != HAL_INS_NONE
     // wait to ensure INS system inits unless using HAL_INS_NONE
+    // WARNING this code triggers WDT and chip resets if INS is not NONE but not connected
+#ifdef SCHEDDEBUG
+    if (!_initialized) {
+        hal.console->printf("%s:%d INS not initialised, entering in wait loop or reset by WDT\n", __PRETTY_FUNCTION__, __LINE__);
+    }
+#endif
     while (!_initialized) {
         sched->delay_microseconds(1000);
     }
@@ -541,14 +552,20 @@ void IRAM_ATTR Scheduler::_main_thread(void *arg)
 
 #ifndef HAL_DISABLE_ADC_DRIVER
     hal.analogin->init();
+    hal.console->printf("%s:%d analogin inited\n", __PRETTY_FUNCTION__, __LINE__);
 #endif
     hal.rcout->init();
-
+#ifdef SCHEDDEBUG
+    hal.console->printf("%s:%d rcout inited\n", __PRETTY_FUNCTION__, __LINE__);
+#endif
     sched->callbacks->setup();
-
+#ifdef SCHEDDEBUG
+    hal.console->printf("%s:%d setup inited\n", __PRETTY_FUNCTION__, __LINE__);
+#endif
     sched->set_system_initialized();
 
 #ifdef SCHEDDEBUG
+    printf("%s:%d initialised\n", __PRETTY_FUNCTION__, __LINE__);
     hal.console->printf("%s:%d initialised\n", __PRETTY_FUNCTION__, __LINE__);
 #endif
     while (true) {

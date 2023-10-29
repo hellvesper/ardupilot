@@ -121,6 +121,9 @@ void Storage::_flash_load(void)
     printf("%s:%d \n", __PRETTY_FUNCTION__, __LINE__);
 #endif
     if (!_flash.init()) {
+#ifdef STORAGEDEBUG
+        hal.console->printf("%s:%d unable to init flash storage\n", __PRETTY_FUNCTION__, __LINE__);
+#endif
         AP_HAL::panic("unable to init flash storage");
     }
 }
@@ -186,7 +189,7 @@ bool Storage::_flash_read_data(uint8_t sector, uint32_t offset, uint8_t *data, u
 bool Storage::_flash_erase_sector(uint8_t sector)
 {
 #ifdef STORAGEDEBUG
-    printf("%s:%d  \n", __PRETTY_FUNCTION__, __LINE__);
+    printf("%s->%s:%d  \n", __FILE__, __PRETTY_FUNCTION__, __LINE__);
 #endif
     size_t address = sector * STORAGE_SECTOR_SIZE;
     return esp_partition_erase_range(p, address, STORAGE_SECTOR_SIZE) == ESP_OK;

@@ -76,13 +76,19 @@
 // #define DEFAULT_SERIAL9_BAUD            (115200/1000)
 
 //Inertial sensors
-#define HAL_INS_DEFAULT HAL_INS_NONE
+//#define HAL_INS_DEFAULT HAL_INS_NONE
 //#define HAL_INS_DEFAULT HAL_INS_MPU9250_I2C
-//#define PROBE_IMU_I2C(driver, bus, addr, args ...) ADD_BACKEND(AP_InertialSensor_ ## driver::probe(*this,GET_I2C_DEVICE(bus, addr),##args))
+#define HAL_INS_DEFAULT HAL_INS_MPU60XX_I2C
+#define HAL_INS_MPU60XX_I2C_BUS 0
+#define HAL_INS_MPU60XX_I2C_ADDR (0x68)
+// IMU probing:
+#define PROBE_IMU_I2C(driver, bus, addr, args ...) ADD_BACKEND(AP_InertialSensor_ ## driver::probe(*this,GET_I2C_DEVICE(bus, addr),##args))
+#define HAL_INS_PROBE_LIST PROBE_IMU_I2C(Invensense, HAL_INS_MPU60XX_I2C_BUS, HAL_INS_MPU60XX_I2C_ADDR, ROTATION_NONE)
 //#define HAL_INS_PROBE_LIST PROBE_IMU_I2C(Invensense, 0, 0x68, ROTATION_NONE)
 
 //I2C Buses
-#define HAL_ESP32_I2C_BUSES {.port=I2C_NUM_0, .sda=GPIO_NUM_13, .scl=GPIO_NUM_14, .speed=400*KHZ, .internal=true, .soft=true}
+//#define HAL_ESP32_I2C_BUSES {.port=I2C_NUM_0, .sda=GPIO_NUM_41, .scl=GPIO_NUM_42, .speed=400*KHZ, .internal=true, .soft=true}
+#define HAL_ESP32_I2C_BUSES {.port=I2C_NUM_0, .sda=GPIO_NUM_41, .scl=GPIO_NUM_42, .speed=400*KHZ, .internal=true, .soft=false} // software i2c doesn't work
 
 //SPI Buses
 #define HAL_ESP32_SPI_BUSES {}
@@ -91,10 +97,10 @@
 #define HAL_ESP32_SPI_DEVICES {}
 
 //RCIN
-#define HAL_ESP32_RCIN GPIO_NUM_14
+#define HAL_ESP32_RCIN GPIO_NUM_46
 
 //RMT pin number
-#define HAL_ESP32_RMT_RX_PIN_NUMBER GPIO_NUM_14
+#define HAL_ESP32_RMT_RX_PIN_NUMBER GPIO_NUM_46
 
 //RCOUT
 // #define HAL_ESP32_RCOUT {GPIO_NUM_25, GPIO_NUM_27, GPIO_NUM_33, GPIO_NUM_32, GPIO_NUM_22, GPIO_NUM_21}
@@ -122,15 +128,15 @@
 #endif
 
 //WIFI
-#define HAL_ESP32_WIFI 1  //1-TCP, 2-UDP, comment this line = without wifi
-#define WIFI_SSID "ardupilot-esp32"
-#define WIFI_PWD "ardupilot-esp32"
+//#define HAL_ESP32_WIFI 1  //1-TCP, 2-UDP, comment this line = without wifi
+//#define WIFI_SSID "ardupilot-esp32"
+//#define WIFI_PWD "ardupilot-esp32"
 
 //UARTs
 // UART_NUM_0 and UART_NUM_2 are configured to use defaults
 #define HAL_ESP32_UART_DEVICES \
-    {.port=UART_NUM_0, .rx=GPIO_NUM_44 , .tx=GPIO_NUM_43 },\
-    {.port=UART_NUM_1, .rx=GPIO_NUM_18, .tx=GPIO_NUM_17}
+    {.port=UART_NUM_0, .rx=GPIO_NUM_44 , .tx=GPIO_NUM_43 }
+//    {.port=UART_NUM_1, .rx=GPIO_NUM_18, .tx=GPIO_NUM_17}
 
 //ADC
 #define HAL_DISABLE_ADC_DRIVER 1

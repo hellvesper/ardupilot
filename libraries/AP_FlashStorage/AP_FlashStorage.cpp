@@ -46,7 +46,8 @@ AP_FlashStorage::AP_FlashStorage(uint8_t *_mem_buffer,
 // initialise storage
 bool AP_FlashStorage::init(void)
 {
-    debug("running init()\n");
+    debug("%s:%d start storage init \n", __PRETTY_FUNCTION__, __LINE__);
+    
 
     // start with empty memory buffer
     memset(mem_buffer, 0, storage_size);
@@ -55,25 +56,32 @@ bool AP_FlashStorage::init(void)
     struct sector_header header[2];
 
     // read headers and possibly initialise if bad signature
+    debug("%s:%d read headers and possibly initialise if bad signature \n", __PRETTY_FUNCTION__, __LINE__);
     for (uint8_t i=0; i<2; i++) {
         if (!flash_read(i, 0, (uint8_t *)&header[i], sizeof(header[i]))) {
+            debug("%s:%d Err, can't read header \n", __PRETTY_FUNCTION__, __LINE__);
             return false;
         }
         bool bad_header = !header[i].signature_ok();
+        debug("%s:%d bad_header: %s\n", __PRETTY_FUNCTION__, __LINE__, bad_header ? "true" : "false");
         enum SectorState state = header[i].get_state();
         if (state != SECTOR_STATE_AVAILABLE &&
             state != SECTOR_STATE_IN_USE &&
             state != SECTOR_STATE_FULL) {
             bad_header = true;
+            debug("%s:%d bad_header is True \n", __PRETTY_FUNCTION__, __LINE__);
         }
 
         // initialise if bad header
+        debug("%s:%d initialise if bad header \n", __PRETTY_FUNCTION__, __LINE__);
         if (bad_header) {
+            debug("%s:%d bad_header=true, erase_all \n", __PRETTY_FUNCTION__, __LINE__);
             return erase_all();
         }
     }
 
     // work out the first sector to read from using sector states
+    debug("%s:%d work out the first sector to read from using sector states \n", __PRETTY_FUNCTION__, __LINE__);
     enum SectorState states[2] {header[0].get_state(), header[1].get_state()};
     uint8_t first_sector;
 
@@ -96,6 +104,7 @@ bool AP_FlashStorage::init(void)
     }
 
     // load data from any current sectors
+    debug("%s:%d load data from any current sectors \n", __PRETTY_FUNCTION__, __LINE__);
     for (uint8_t i=0; i<2; i++) {
         uint8_t sector = (first_sector + i) & 1;
         if (states[sector] == SECTOR_STATE_IN_USE ||
@@ -107,10 +116,12 @@ bool AP_FlashStorage::init(void)
     }
 
     // clear any write error
+    debug("%s:%d clear any write error \n", __PRETTY_FUNCTION__, __LINE__);
     write_error = false;
     reserved_space = 0;
     
     // if the first sector is full then write out all data so we can erase it
+    debug("%s:%d if the first sector is full then write out all data so we can erase it \n", __PRETTY_FUNCTION__, __LINE__);
     if (states[first_sector] == SECTOR_STATE_FULL) {
         current_sector = first_sector ^ 1;
         if (!write_all()) {
@@ -119,6 +130,7 @@ bool AP_FlashStorage::init(void)
     }
 
     // erase any sectors marked full
+    debug("%s:%d erase any sectors marked full \n", __PRETTY_FUNCTION__, __LINE__);
     for (uint8_t i=0; i<2; i++) {
         if (states[i] == SECTOR_STATE_FULL) {
             if (!erase_sector(i, true)) {
@@ -130,6 +142,7 @@ bool AP_FlashStorage::init(void)
     reserved_space = 0;
     
     // ready to use
+    debug("%s:%d ready to use \n", __PRETTY_FUNCTION__, __LINE__);
     return true;
 }
 
@@ -250,7 +263,7 @@ bool AP_FlashStorage::write(uint16_t offset, uint16_t length)
         length -= n2;
     }
 
-    //debug("write_offset %u\n", write_offset);
+    // debug("write_offset %u\n", write_offset);
 
     // handle wrap to next sector
     // write data
@@ -327,14 +340,17 @@ bool AP_FlashStorage::load_sector(uint8_t sector)
  */
 bool AP_FlashStorage::erase_sector(uint8_t sector, bool mark_available)
 {
+    debug("%s -> %s:%d erase one sector: %u mark: %s  \n", __FILE__, __PRETTY_FUNCTION__, __LINE__, sector, mark_available ? "true" : "false");
     if (!flash_erase(sector)) {
         return false;
     }
+    debug("%s -> %s:%d erase sector %u: ok\n", __FILE__, __PRETTY_FUNCTION__, __LINE__, sector);
     if (!mark_available) {
         return true;
     }
     struct sector_header header;
     header.set_state(SECTOR_STATE_AVAILABLE);
+    debug("%s -> %s:%d writing sector %u: ok\n", __FILE__, __PRETTY_FUNCTION__, __LINE__, sector);
     return flash_write(sector, 0, (const uint8_t *)&header, sizeof(header));
 }
 
@@ -347,17 +363,22 @@ bool AP_FlashStorage::erase_all(void)
 
     current_sector = 0;
     write_offset = sizeof(struct sector_header);
-    
+    debug("%s -> %s:%d erase sector 0 \n", __FILE__, __PRETTY_FUNCTION__, __LINE__);
     if (!erase_sector(0, current_sector!=0)) {
         return false;
     }
+    debug("%s -> %s:%d erase sector 1 \n", __FILE__, __PRETTY_FUNCTION__, __LINE__);
     if (!erase_sector(1, current_sector!=1)) {
         return false;
     }
     
     // mark current sector as in-use
+    debug("%s:%d mark current sector as in-use \n", __PRETTY_FUNCTION__, __LINE__);
+    debug("%s:%d init header \n", __PRETTY_FUNCTION__, __LINE__);
     struct sector_header header;
+    debug("%s:%d set state \n", __PRETTY_FUNCTION__, __LINE__);
     header.set_state(SECTOR_STATE_IN_USE);
+    debug("%s:%d flash write \n", __PRETTY_FUNCTION__, __LINE__);
     return flash_write(current_sector, 0, (const uint8_t *)&header, sizeof(header));    
 }
 
@@ -654,6 +675,10 @@ void AP_FlashStorage::sector_header::set_state(SectorState state)
  */
 bool AP_FlashStorage::sector_header::signature_ok(void) const
 {
+    debug("%s:%d signature1 0x%06X\n",  __PRETTY_FUNCTION__, __LINE__, signature1);
+    debug("%s:%d signature1 %u\n",      __PRETTY_FUNCTION__, __LINE__, signature1);
+    debug("%s:%d signature: 0x%06X\n",  __PRETTY_FUNCTION__, __LINE__, signature);
+    debug("%s:%d signature: %u\n",      __PRETTY_FUNCTION__, __LINE__, signature);
     return signature1 == signature;
 }
 
@@ -674,6 +699,10 @@ AP_FlashStorage::SectorState AP_FlashStorage::sector_header::get_state(void) con
 void AP_FlashStorage::sector_header::set_state(SectorState state)
 {
     signature1 = signature;
+    debug("%s:%d signature1 0x%06X\n",  __PRETTY_FUNCTION__, __LINE__, signature1);
+    debug("%s:%d signature1 %u\n",      __PRETTY_FUNCTION__, __LINE__, signature1);
+    debug("%s:%d signature: 0x%06X\n",  __PRETTY_FUNCTION__, __LINE__, signature);
+    debug("%s:%d signature: %u\n",      __PRETTY_FUNCTION__, __LINE__, signature);
     switch (state) {
     case SECTOR_STATE_AVAILABLE:
         state1 = 0xFF;
