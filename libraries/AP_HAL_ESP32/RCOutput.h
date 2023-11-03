@@ -25,6 +25,8 @@
 #define HAL_PARAM_DEFAULTS_PATH nullptr
 #include <AP_HAL/Util.h>
 
+#define PWM_FRACTION_TO_WIDTH(pwmp, denominator, numerator)  ((uint16_t)((((uint16_t)(pwmp)) * (uint16_t)(numerator)) / (uint16_t)(denominator)))
+
 namespace ESP32
 {
 

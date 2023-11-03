@@ -219,6 +219,25 @@ void RCOutput::push()
         if ((1U<<i) & _pending_mask) {
             uint32_t period_us = _pending[i];
 
+//#define MODE_PWM_BRUSHED
+#ifndef MODE_PWM
+#define MODE_PWM MODE_PWM_NORMAL
+#endif
+            if (MODE_PWM == MODE_PWM_BRUSHED) {
+                if (period_us <= _esc_pwm_min) {
+                    period_us = 0;
+                } else if (period_us >= _esc_pwm_max) {
+                    period_us = 1000000 / get_freq(i); // impulse width (us) equal to freq
+                } else {
+                    // 50hz = 20_000uS
+                    // pwm min = 1000
+                    // pwm max = 2000
+                    // window = 1000uS
+                    period_us = PWM_FRACTION_TO_WIDTH(1000000/get_freq(i), \
+                               (_esc_pwm_max - _esc_pwm_min), (period_us - _esc_pwm_min));
+                }
+            }
+
             // If safety is on and safety mask not bypassing
             if (safety_on && !(safety_mask & (1U<<(i)))) {
                 // safety is on, overwride pwm
